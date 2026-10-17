@@ -19,10 +19,11 @@ https://console.apify.com/account/integrations
 
 - `.github/workflows/horizon-daily.yml`
 - `data/config.actions.json`
+- `scripts/run_actions.py`
 
 无需自行上传文件。工作流入口：https://github.com/ActiveInsighter/Horizon/actions/workflows/horizon-daily.yml 。
 
-不要上传 `.env`、`.venv`、`.tools`、`.cache`。仅添加上述两份无密钥的文件即可使用原项目源码运行。本机的 `run.sh`、`check.sh` 不是这个 Actions 工作流的依赖。
+不要上传 `.env`、`.venv`、`.tools`、`.cache`。上述文件均不含密钥。本机的 `run.sh`、`check.sh` 不是这个 Actions 工作流的依赖。
 
 上游的 `.github/workflows/daily-summary.yml.disabled` 保持原样；本指南启用的是 `horizon-daily.yml`，避免两份日报任务重复运行。
 
@@ -48,6 +49,8 @@ https://console.apify.com/account/integrations
 
 AI Key 和模型尚未准备好时，先完成配置，等填好之后再启用任务。工作流会在缺少必填配置时明确报出变量名。
 
+GPT Load 使用 OpenAI 兼容接口时，Base URL 应为 `https://你的域名/v1`；工作流对域名根地址自动补齐 `/v1`。本次部署的模型 ID 为 `gemini-3.5-flash-lite`，注意拼写是 `gemini`。
+
 GitHub 会自动提供 `GITHUB_TOKEN`，不必自己申请或新增同名 Secret。
 
 ## 4. 修改要关注的账号
@@ -66,7 +69,9 @@ X 抓取每次 Actor 运行至少请求 100 条。每个关键词额外启动一
 
 选择 **Horizon Daily → Run workflow → Run workflow**。工作流文件需要在仓库默认分支上，手动运行入口才会出现。
 
-等待成功后，进入这次运行详情，下方 **Artifacts** 中下载 `horizon-briefings-序号`。解压后可阅读中文和英文 Markdown 日报，当前保留 14 天。
+等待成功后，进入这次运行详情，下方 **Artifacts** 中下载 `horizon-briefings-序号`。解压后，`summaries/` 包含中文和英文 Markdown 日报，`run-evidence/x-posts.md` 包含本次采集的 X 原帖；`collected-items.json`、`analyzed-items.json` 和 `source-counts.json` 供核对来源、评分和数量。附件当前保留 14 天。
+
+流程会先用一个很小的 JSON 请求验证模型调用，再抓取信息源。AI 预检失败时直接终止；全部内容分析失败时也会报错，避免把空日报误报为成功。已经抓到的公开内容在后续处理失败时也会尝试上传，便于排错。
 
 工作流设定 `17 23 * * *`，即 UTC 23:17、北京时间次日 07:17。GitHub 定时运行可能延迟，不保证准点；公共仓库连续 60 天没有活动时，定时工作流会被自动禁用。
 
