@@ -3,8 +3,8 @@ name: Horizon Daily
 on:
   workflow_dispatch:
     inputs:
-      inspect_apify:
-        description: 'Only inspect existing Apify runs and export their X posts'
+      paid_refresh:
+        description: 'Allow a NEW Apify scrape and AI calls (incurs usage); unchecked = inspect existing results only'
         type: boolean
         default: false
   schedule:
@@ -57,11 +57,11 @@ jobs:
         run: uv sync --frozen
 
       - name: Generate daily briefings
-        if: ${{ !inputs.inspect_apify }}
+        if: ${{ github.event_name == 'schedule' || inputs.paid_refresh }}
         run: uv run --frozen python scripts/run_actions.py
 
       - name: Inspect existing Apify results
-        if: ${{ inputs.inspect_apify }}
+        if: ${{ github.event_name == 'workflow_dispatch' && !inputs.paid_refresh }}
         run: uv run --frozen python scripts/run_actions.py --inspect-apify
 
       - name: Save briefings for download

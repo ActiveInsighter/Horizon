@@ -105,6 +105,15 @@ async def inspect_apify(config):
 
 
 class ActionsOrchestrator(HorizonOrchestrator):
+    async def _fetch_with_progress(self, name, scraper, since):
+        outcome = await super()._fetch_with_progress(name, scraper, since)
+        receipts = getattr(scraper, 'run_receipts', None)
+        if receipts:
+            save_json('apify-fetch-receipts.json', receipts)
+            for receipt in receipts:
+                print('Apify returned / retained:', json.dumps(receipt, ensure_ascii=False), flush=True)
+        return outcome
+
     async def fetch_all_sources(self, since):
         items = await super().fetch_all_sources(since)
         save_json('collected-items.json', [item.model_dump(mode='json') for item in items])

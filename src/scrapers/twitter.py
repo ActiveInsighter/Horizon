@@ -26,6 +26,7 @@ class TwitterScraper(BaseScraper):
     def __init__(self, config: TwitterConfig, http_client: httpx.AsyncClient):
         super().__init__(config, http_client)
         self.config = config
+        self.run_receipts: list[dict] = []
 
     async def fetch(self, since: datetime) -> List[ContentItem]:
         if not self.config.enabled:
@@ -47,6 +48,7 @@ class TwitterScraper(BaseScraper):
         items: List[ContentItem] = []
         seen_ids: set[str] = set()
         max_items = max(100, self.config.fetch_limit)
+        requested_since = since.astimezone(timezone.utc).isoformat()
 
         if users:
             logger.info(f"Fetching Twitter (Apify) for users: {users}")
@@ -57,6 +59,8 @@ class TwitterScraper(BaseScraper):
                     "profile_urls": users,
                     "search_sort": "Latest",
                     "max_items": max_items,
+                    "since": requested_since,
+                    "per_profile_limit": max(1, max_items // len(users)),
                 },
                 since,
                 items,
@@ -73,6 +77,7 @@ class TwitterScraper(BaseScraper):
                         "search_query": keyword,
                         "search_sort": "Latest",
                         "max_items": max_items,
+                        "since": requested_since,
                     },
                     since,
                     items,
@@ -98,6 +103,7 @@ class TwitterScraper(BaseScraper):
         if not await self._wait_for_run(token, run_id):
             return
         raw_items = await self._fetch_dataset(token, dataset_id)
+        previous_count = len(items)
         for raw in raw_items:
             if isinstance(raw, dict) and raw.get("noResults"):
                 continue
@@ -105,6 +111,15 @@ class TwitterScraper(BaseScraper):
             if parsed and parsed.id not in seen_ids:
                 seen_ids.add(parsed.id)
                 items.append(parsed)
+        self.run_receipts.append({
+            "run_id": run_id,
+            "dataset_id": dataset_id,
+            "source_mode": payload.get("source_mode"),
+            "requested_max_items": payload.get("max_items"),
+            "requested_since": payload.get("since"),
+            "raw_rows": len(raw_items),
+            "included_unique_rows": len(items) - previous_count,
+        })
 
     async def _start_run_with_payload(
         self, token: str, payload: dict

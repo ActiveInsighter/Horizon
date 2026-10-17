@@ -362,6 +362,38 @@ def test_keywords_only_fetch_returns_items(monkeypatch):
     assert posted["payload"]["search_query"] == "LLM"
     assert posted["payload"]["search_sort"] == "Latest"
     assert posted["payload"]["max_items"] == 100
+    assert posted["payload"]["since"] == since.isoformat()
+
+
+def test_profile_fetch_filters_remotely_and_reports_raw_vs_retained_counts(monkeypatch):
+    monkeypatch.setenv("APIFY_TOKEN", "test_token")
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    older = _tweet("old", created_at=(since - timedelta(days=2)).isoformat())
+    recent = _tweet("recent", created_at=(since + timedelta(hours=1)).isoformat())
+    posted = {}
+
+    def handler(request):
+        if request.method == "POST":
+            posted.update(json.loads(request.content))
+            return httpx.Response(200, json=_run_resp())
+        if "/actor-runs/" in request.url.path:
+            return httpx.Response(200, json=_status_resp())
+        if "/datasets/" in request.url.path:
+            return httpx.Response(200, json=[older, recent, recent])
+        raise AssertionError(f"Unexpected: {request.url}")
+
+    async def check():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            scraper = TwitterScraper(_make_config(users=["karpathy", "ylecun"]), client)
+            result = await scraper.fetch(since)
+            assert len(result) == 1
+            assert posted["since"] == since.isoformat()
+            assert posted["max_items"] == 100
+            assert posted["per_profile_limit"] == 50
+            assert scraper.run_receipts[0]["raw_rows"] == 3
+            assert scraper.run_receipts[0]["included_unique_rows"] == 1
+
+    asyncio.run(check())
 
 
 def test_missing_token_with_keywords_returns_empty(monkeypatch):
