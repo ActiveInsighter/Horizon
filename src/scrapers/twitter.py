@@ -186,7 +186,7 @@ class TwitterScraper(BaseScraper):
             if parsed and parsed.id not in seen_ids:
                 seen_ids.add(parsed.id)
                 items.append(parsed)
-        self.run_receipts.append({
+        receipt = {
             "run_id": run_id,
             "dataset_id": dataset_id,
             "source_mode": payload.get("source_mode"),
@@ -199,7 +199,20 @@ class TwitterScraper(BaseScraper):
             "usage_total_usd": self.completed_runs.get(run_id, {}).get('usageTotalUsd'),
             "charged_event_counts": self.completed_runs.get(run_id, {}).get('chargedEventCounts'),
             "charge_limit_usd": self.config.apify_max_total_charge_usd,
-        })
+        }
+        self.run_receipts.append(receipt)
+        store_id = self.completed_runs.get(run_id, {}).get('defaultKeyValueStoreId')
+        if store_id:
+            response = await self.client.get(
+                f'{_APIFY_BASE}/key-value-stores/{store_id}/records/OUTPUT',
+                headers={'Authorization': f'Bearer {token}'}, timeout=15,
+            )
+            if response.status_code == 200:
+                result = response.json()
+                receipt.update({'actor_outcome': result.get('outcome'),
+                                'actor_message': result.get('message')})
+                if result.get('outcome') not in ('delivered', 'delivered_partial', 'no_results', None):
+                    raise RuntimeError(f"Apify Actor outcome {result.get('outcome')}: {result.get('message')}")
 
     async def _start_run_with_payload(
         self, token: str, payload: dict
@@ -248,7 +261,7 @@ class TwitterScraper(BaseScraper):
                 status = resp.json()["data"]["status"]
                 self.completed_runs[run_id] = {
                     key: resp.json()['data'].get(key)
-                    for key in ('status', 'usageTotalUsd', 'chargedEventCounts')
+                    for key in ('status', 'usageTotalUsd', 'chargedEventCounts', 'defaultKeyValueStoreId')
                 }
                 if status == "SUCCEEDED":
                     return True

@@ -99,6 +99,18 @@ async def inspect_apify(config):
                     (item.published_at.isoformat() for item in parsed_items), default=None
                 )
             report.append(record)
+            if record.get('outcome') == 'error':
+                response = await client.get(f'/logs/{run["id"]}')
+                if response.status_code == 200:
+                    log_text = response.text
+                    for name in ('APIFY_TOKEN', 'OPENAI_API_KEY'):
+                        secret = os.getenv(name)
+                        if secret:
+                            log_text = log_text.replace(secret, '[redacted]')
+                    log_text = re.sub(r'apify_api_[A-Za-z0-9_-]+', '[redacted]', log_text)
+                    log_text = re.sub(r'(?i)([?&](?:token|key|api_key)=)[^&\s]+', r'\1[redacted]', log_text)
+                    Path('data/run-evidence').mkdir(parents=True, exist_ok=True)
+                    Path('data/run-evidence/apify-error.log').write_text(log_text, encoding='utf-8')
     save_json('apify-runs.json', report)
     ordered = sorted(posts.values(), key=lambda item: item.published_at, reverse=True)
     save_json('recovered-x-items.json', [item.model_dump(mode='json') for item in ordered])

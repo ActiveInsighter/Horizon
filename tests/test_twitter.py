@@ -158,6 +158,40 @@ def test_official_batch_fetches_posts_and_replies_in_one_paid_run(monkeypatch):
     asyncio.run(check())
 
 
+def test_actor_internal_error_is_not_treated_as_empty_success(monkeypatch):
+    monkeypatch.setenv('APIFY_TOKEN', 'test_token')
+    starts = []
+
+    def handler(request):
+        if request.method == 'POST':
+            starts.append(request)
+            return httpx.Response(200, json=_run_resp())
+        if '/actor-runs/' in request.url.path:
+            return httpx.Response(200, json={'data': {
+                'status': 'SUCCEEDED', 'defaultKeyValueStoreId': 'store1', 'usageTotalUsd': 0.006,
+            }})
+        if '/datasets/' in request.url.path:
+            return httpx.Response(200, json=[])
+        if '/key-value-stores/' in request.url.path:
+            return httpx.Response(200, json={'outcome': 'error', 'message': 'The run did not finish.'})
+        raise AssertionError(f'Unexpected request: {request.url}')
+
+    async def check():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            scraper = TwitterScraper(_make_config(users=['OpenAI'], batch_discussions=True), client)
+            try:
+                await scraper.fetch(datetime.now(timezone.utc) - timedelta(hours=24))
+            except RuntimeError as exc:
+                assert 'Apify Actor outcome error' in str(exc)
+            else:
+                raise AssertionError('Actor application error must fail the fetch')
+            assert len(starts) == 1
+            assert scraper.run_receipts[0]['actor_outcome'] == 'error'
+            assert scraper.run_receipts[0]['usage_total_usd'] == 0.006
+
+    asyncio.run(check())
+
+
 # ---------------------------------------------------------------------------
 # Existing fetch tests
 # ---------------------------------------------------------------------------
