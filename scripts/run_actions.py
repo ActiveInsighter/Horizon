@@ -110,8 +110,20 @@ class ActionsOrchestrator(HorizonOrchestrator):
         receipts = getattr(scraper, 'run_receipts', None)
         if receipts:
             save_json('apify-fetch-receipts.json', receipts)
+            save_json('apify-raw-items.json', scraper.raw_items)
+            if scraper.discussion_records:
+                save_json('x-discussions.json', scraper.discussion_records)
             for receipt in receipts:
                 print('Apify returned / retained:', json.dumps(receipt, ensure_ascii=False), flush=True)
+            summary_path = os.getenv('GITHUB_STEP_SUMMARY')
+            if summary_path:
+                with open(summary_path, 'a', encoding='utf-8') as summary:
+                    summary.write('## Apify 抓取记录\n\n| 指标 | 数量 |\n|---|---:|\n')
+                    for receipt in receipts:
+                        for label, key in [('原始返回条数', 'raw_rows'), ('官方主帖', 'official_posts'),
+                                           ('其他用户回复', 'community_rows'), ('已附加回复', 'attached_replies'),
+                                           ('Actor 报告费用（美元）', 'usage_total_usd')]:
+                            summary.write(f'| {label} | {receipt.get(key, "待核对")} |\n')
         return outcome
 
     async def fetch_all_sources(self, since):

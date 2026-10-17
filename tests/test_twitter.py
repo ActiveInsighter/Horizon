@@ -91,6 +91,73 @@ def test_scweet_prefixed_id_produces_a_valid_post_link():
     asyncio.run(check())
 
 
+def test_official_batch_fetches_posts_and_replies_in_one_paid_run(monkeypatch):
+    monkeypatch.setenv('APIFY_TOKEN', 'test_token')
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    config = _make_config(
+        users=['OpenAI', 'AnthropicAI'], batch_discussions=True,
+        fetch_reply_text=True, max_replies_per_tweet=1, reply_min_likes=5,
+        apify_max_total_charge_usd=0.04,
+    )
+    parent = _tweet('100', screen_name='OpenAI', text='Official model release', conversation_id='100')
+    reply = _tweet('101', screen_name='reader', text='Useful real-world feedback',
+                   conversation_id='100', in_reply_to_status_id='100', favorite_count=10)
+    other = _tweet('102', screen_name='reader', text='Unrelated conversation',
+                   conversation_id='999', in_reply_to_status_id='999')
+    old = _tweet('103', screen_name='OpenAI', created_at=(since-timedelta(days=1)).isoformat())
+    starts = []
+
+    def handler(request):
+        if request.method == 'POST':
+            starts.append(request)
+            assert request.headers['Authorization'] == 'Bearer test_token'
+            assert request.url.params['maxTotalChargeUsd'] == '0.04'
+            assert request.url.params['restartOnError'] == 'false'
+            assert 'token' not in request.url.params
+            payload = json.loads(request.content)
+            assert payload['source_mode'] == 'search'
+            assert payload['max_items'] == 100
+            assert payload['since'] == since.isoformat()
+            assert payload['until']
+            assert 'from:OpenAI' in payload['search_query']
+            assert 'to:AnthropicAI' in payload['search_query']
+            assert 'filter:replies min_faves:5' in payload['search_query']
+            return httpx.Response(200, json=_run_resp())
+        if '/actor-runs/' in request.url.path:
+            return httpx.Response(200, json={'data': {
+                'status': 'SUCCEEDED', 'usageTotalUsd': 0.0072,
+                'chargedEventCounts': {'actor-start': 1, 'row': 4},
+            }})
+        if '/datasets/' in request.url.path:
+            return httpx.Response(200, json=[parent, reply, other, old])
+        raise AssertionError(f'Unexpected request: {request.url}')
+
+    async def check():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            scraper = TwitterScraper(config, client)
+            posts = await scraper.fetch(since)
+            assert len(posts) == 1
+            assert posts[0].metadata['discussion_replies'][0]['id'] == '101'
+            assert '--- Top Comments ---' in posts[0].content
+            assert 'Unrelated conversation' not in posts[0].content
+            assert scraper.run_receipts[0]['raw_rows'] == 4
+            assert scraper.run_receipts[0]['attached_replies'] == 1
+            assert scraper.run_receipts[0]['usage_total_usd'] == 0.0072
+            # A fresh scraper during the enrichment stage must reuse the cached replies.
+            second = TwitterScraper(config, client)
+            assert await second.fetch_replies_for_item(posts[0])
+            assert len(starts) == 1
+            try:
+                await scraper.fetch(since)
+            except RuntimeError:
+                pass
+            else:
+                raise AssertionError('A second Actor start should be blocked')
+            assert len(starts) == 1
+
+    asyncio.run(check())
+
+
 # ---------------------------------------------------------------------------
 # Existing fetch tests
 # ---------------------------------------------------------------------------

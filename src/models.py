@@ -335,6 +335,8 @@ class TwitterConfig(BaseModel):
     max_replies_per_tweet: int = 3
     max_tweets_to_expand: int = 10
     reply_min_likes: int = 0
+    batch_discussions: bool = False
+    apify_max_total_charge_usd: Optional[float] = Field(default=None, gt=0)
     # Apify settings (used when mode == "apify")
     apify_token_env: str = "APIFY_TOKEN"
     actor_id: str = "altimis~scweet"

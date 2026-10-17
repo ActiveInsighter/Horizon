@@ -1,7 +1,7 @@
 # 在 GitHub Actions 上运行 Horizon
 
 部署仓库：https://github.com/ActiveInsighter/Horizon 。工作流和配置随本指南提交；完整日报运行需要先添加下方密钥及模型配置。
-使用 OpenAI 兼容 AI 接口、Apify X 抓取，生成中英双语日报并保存为 Actions Artifact。**2026-10-17 因费用复核，工作流已手动禁用；当前不会定时运行。** Cron 模板仍保留北京时间约 07:17 的设置，恢复启用前需要确认费用安排。
+使用 OpenAI 兼容 AI 接口、Apify X 抓取，生成中英双语日报并保存为 Actions Artifact。**当前工作流仅支持手动启动，已移除定时触发。** 费用复核后，本次只授权一次官方 AI 账号与评论抓取测试。
 
 ## 1. 获取 Apify Token
 
@@ -75,7 +75,17 @@ X 抓取每次 Actor 运行至少请求 100 条。每个关键词额外启动一
 
 流程会先用一个很小的 JSON 请求验证模型调用，再抓取信息源。AI 预检失败时直接终止；全部内容分析失败时也会报错，避免把空日报误报为成功。已经抓到的公开内容在后续处理失败时也会尝试上传，便于排错。
 
-工作流设定 `17 23 * * *`，即 UTC 23:17、北京时间次日 07:17。GitHub 定时运行可能延迟，不保证准点；公共仓库连续 60 天没有活动时，定时工作流会被自动禁用。
+当前没有定时任务；需要以后明确设置运行频率再添加 schedule。
+
+## 官方 AI 账号与评论模式
+
+当前仅抓取 `OpenAI`、`OpenAIDevs`、`ChatGPTapp`、`AnthropicAI`、`claudeai` 的近 24 小时消息及部分高互动回复，其他来源在本次测试中关闭。
+
+`batch_discussions=true` 将官方作者查询与发给这些账号的回复查询合并成一个 Apify 搜索任务。使用 Top 排序，主帖和回复共享 100 条总上限；回复至少 5 个点赞，每个已抓到的官方帖最多附加 3 条匹配回复。只有能通过父帖 ID 或 conversation_id 与已抓主帖对应的回复才会附加，未匹配的原始结果仍保存在 `apify-raw-items.json`。
+
+这是有上限的搜索样本，不能保证穷尽所有官方消息或所有评论。额外回复搜索被替换为读取本次缓存，不会逐帖启动新 Actor。Apify 启动参数传入 `maxTotalChargeUsd=0.04`、`memory=1024`、`timeout=180` 和 `restartOnError=false`；其费用上限针对该 Actor 运行，AI 调用另计。
+
+`apify-fetch-receipts.json` 记录本次唯一 Actor 的 ID、原始条数、官方帖数、附加回复数和服务端报告费用；`x-discussions.json` 保存每条官方帖对应的回复正文和链接。Action 首页摘要也显示上述数量和费用。
 
 ## 费用和抓取数量
 

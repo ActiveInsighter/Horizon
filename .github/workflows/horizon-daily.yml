@@ -7,9 +7,6 @@ on:
         description: 'Allow a NEW Apify scrape and AI calls (incurs usage); unchecked = inspect existing results only'
         type: boolean
         default: false
-  schedule:
-    # UTC 23:17 = 北京时间次日 07:17；GitHub 定时运行可能延迟。
-    - cron: '17 23 * * *'
 
 permissions:
   contents: read
