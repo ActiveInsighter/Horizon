@@ -21,6 +21,11 @@ _POLL_INTERVAL = 3.0
 _MAX_WAIT = 180
 
 
+def _apify_timestamp(value: datetime) -> str:
+    """Scweet accepts its UTC timestamp format, rather than ISO 8601 offsets."""
+    return value.astimezone(timezone.utc).strftime('%Y-%m-%d_%H:%M:%S_UTC')
+
+
 class TwitterScraper(BaseScraper):
     """Fetch tweets via the Apify altimis/scweet actor."""
 
@@ -56,7 +61,7 @@ class TwitterScraper(BaseScraper):
         items: List[ContentItem] = []
         seen_ids: set[str] = set()
         max_items = max(100, self.config.fetch_limit)
-        requested_since = since.astimezone(timezone.utc).isoformat()
+        requested_since = _apify_timestamp(since)
 
         if users:
             logger.info(f"Fetching Twitter (Apify) for users: {users}")
@@ -111,8 +116,8 @@ class TwitterScraper(BaseScraper):
             query += f' OR (({targets}) filter:replies min_faves:{self.config.reply_min_likes})'
         return {
             'source_mode': 'search', 'search_query': query,
-            'since': since.astimezone(timezone.utc).isoformat(),
-            'until': datetime.now(timezone.utc).isoformat(),
+            'since': _apify_timestamp(since),
+            'until': _apify_timestamp(datetime.now(timezone.utc)),
             'search_sort': 'Top', 'max_items': max(100, self.config.fetch_limit),
         }
 

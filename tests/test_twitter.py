@@ -117,8 +117,8 @@ def test_official_batch_fetches_posts_and_replies_in_one_paid_run(monkeypatch):
             payload = json.loads(request.content)
             assert payload['source_mode'] == 'search'
             assert payload['max_items'] == 100
-            assert payload['since'] == since.isoformat()
-            assert payload['until']
+            assert payload['since'] == since.strftime('%Y-%m-%d_%H:%M:%S_UTC')
+            datetime.strptime(payload['until'], '%Y-%m-%d_%H:%M:%S_UTC')
             assert 'from:OpenAI' in payload['search_query']
             assert 'to:AnthropicAI' in payload['search_query']
             assert 'filter:replies min_faves:5' in payload['search_query']
@@ -463,7 +463,7 @@ def test_keywords_only_fetch_returns_items(monkeypatch):
     assert posted["payload"]["search_query"] == "LLM"
     assert posted["payload"]["search_sort"] == "Latest"
     assert posted["payload"]["max_items"] == 100
-    assert posted["payload"]["since"] == since.isoformat()
+    assert posted["payload"]["since"] == since.strftime('%Y-%m-%d_%H:%M:%S_UTC')
 
 
 def test_profile_fetch_filters_remotely_and_reports_raw_vs_retained_counts(monkeypatch):
@@ -488,7 +488,7 @@ def test_profile_fetch_filters_remotely_and_reports_raw_vs_retained_counts(monke
             scraper = TwitterScraper(_make_config(users=["karpathy", "ylecun"]), client)
             result = await scraper.fetch(since)
             assert len(result) == 1
-            assert posted["since"] == since.isoformat()
+            assert posted["since"] == since.strftime('%Y-%m-%d_%H:%M:%S_UTC')
             assert posted["max_items"] == 100
             assert posted["per_profile_limit"] == 50
             assert scraper.run_receipts[0]["raw_rows"] == 3
