@@ -2,6 +2,11 @@ name: Horizon Daily
 
 on:
   workflow_dispatch:
+    inputs:
+      inspect_apify:
+        description: 'Only inspect existing Apify runs and export their X posts'
+        type: boolean
+        default: false
   schedule:
     # UTC 23:17 = 北京时间次日 07:17；GitHub 定时运行可能延迟。
     - cron: '17 23 * * *'
@@ -52,7 +57,12 @@ jobs:
         run: uv sync --frozen
 
       - name: Generate daily briefings
+        if: ${{ !inputs.inspect_apify }}
         run: uv run --frozen python scripts/run_actions.py
+
+      - name: Inspect existing Apify results
+        if: ${{ inputs.inspect_apify }}
+        run: uv run --frozen python scripts/run_actions.py --inspect-apify
 
       - name: Save briefings for download
         if: ${{ !cancelled() }}

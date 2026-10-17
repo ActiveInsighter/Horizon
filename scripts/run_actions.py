@@ -2,6 +2,7 @@
 
 import asyncio
 from collections import Counter
+from datetime import datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
@@ -13,10 +14,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from dotenv import load_dotenv
+import httpx
 from src.ai.client import create_ai_client
 from src.models import SourceType
 from src.orchestrator import HorizonOrchestrator
 from src.storage.manager import StorageManager
+from src.scrapers.twitter import TwitterScraper
 
 
 def normalize_base_url(value):
@@ -41,6 +44,58 @@ def save_json(filename, value):
     )
 
 
+def save_x_posts(posts):
+    output = Path('data/run-evidence')
+    output.mkdir(parents=True, exist_ok=True)
+    lines = ['# 本次抓取的 X 帖子', '', f'共 {len(posts)} 条；这是原始采集结果，尚未按 AI 分数筛选。', '']
+    for item in posts:
+        lines.extend([
+            f'## {item.author or "unknown"} (@{item.metadata.get("screen_name", "unknown")})', '',
+            f'发布时间：{item.published_at.isoformat()}', '',
+            str(item.url), '', item.content or item.title, '',
+        ])
+    (output / 'x-posts.md').write_text('\n'.join(lines), encoding='utf-8')
+
+
+async def inspect_apify(config):
+    """Read existing results without starting another Actor or calling AI."""
+    twitter = config.sources.twitter
+    headers = {'Authorization': 'Bearer ' + os.environ[twitter.apify_token_env]}
+    report, posts = [], {}
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    async with httpx.AsyncClient(base_url='https://api.apify.com/v2', headers=headers, timeout=30) as client:
+        response = await client.get(f'/acts/{twitter.actor_id}/runs', params={'desc': 'true', 'limit': 5})
+        response.raise_for_status()
+        scraper = TwitterScraper(twitter, client)
+        for run in response.json()['data']['items']:
+            record = {key: run.get(key) for key in ('id', 'status', 'startedAt', 'statusMessage')}
+            store_id = run.get('defaultKeyValueStoreId')
+            if store_id:
+                output = await client.get(f'/key-value-stores/{store_id}/records/OUTPUT')
+                if output.status_code == 200:
+                    result = output.json()
+                    record['outcome'] = result.get('outcome')
+                    record['message'] = result.get('message')
+            dataset = run.get('defaultDatasetId')
+            if dataset and run['status'] == 'SUCCEEDED':
+                data = await client.get(f'/datasets/{dataset}/items', params={'limit': 100})
+                data.raise_for_status()
+                rows = data.json()
+                record['dataset_rows'] = len(rows)
+                for row in rows:
+                    item = scraper._parse_item(row, since)
+                    if item:
+                        posts[item.id] = item
+            report.append(record)
+    save_json('apify-runs.json', report)
+    ordered = sorted(posts.values(), key=lambda item: item.published_at, reverse=True)
+    save_json('recovered-x-items.json', [item.model_dump(mode='json') for item in ordered])
+    save_x_posts(ordered)
+    for run in report:
+        print('Existing Apify run:', json.dumps(run, ensure_ascii=False), flush=True)
+    print(f'Exported {len(ordered)} X posts from existing datasets.', flush=True)
+
+
 class ActionsOrchestrator(HorizonOrchestrator):
     async def fetch_all_sources(self, since):
         items = await super().fetch_all_sources(since)
@@ -48,14 +103,7 @@ class ActionsOrchestrator(HorizonOrchestrator):
         counts = Counter(item.source_type.value for item in items)
         save_json('source-counts.json', dict(counts))
         posts = [item for item in items if item.source_type == SourceType.TWITTER]
-        lines = ['# 本次抓取的 X 帖子', '', f'共 {len(posts)} 条；这是原始采集结果，尚未按 AI 分数筛选。', '']
-        for item in posts:
-            lines.extend([
-                f'## {item.author or "unknown"} (@{item.metadata.get("screen_name", "unknown")})', '',
-                f'发布时间：{item.published_at.isoformat()}', '',
-                str(item.url), '', item.content or item.title, '',
-            ])
-        Path('data/run-evidence/x-posts.md').write_text('\n'.join(lines), encoding='utf-8')
+        save_x_posts(posts)
         print('Collected source counts:', dict(counts), flush=True)
         return items
 
@@ -75,6 +123,10 @@ class ActionsOrchestrator(HorizonOrchestrator):
 async def main():
     os.chdir(ROOT)
     load_dotenv(ROOT / '.env')
+    if '--inspect-apify' in sys.argv:
+        config = StorageManager('data', config_path='data/config.actions.json').load_config()
+        await inspect_apify(config)
+        return
     original = os.environ['HORIZON_AI_BASE_URL']
     normalized = normalize_base_url(original)
     os.environ['HORIZON_AI_BASE_URL'] = normalized
