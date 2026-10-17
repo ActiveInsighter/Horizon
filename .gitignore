@@ -44,6 +44,8 @@ data/subscribers.json
 data/mcp.secrets.json
 data/mcp-secrets.json
 data/mcp-runs/
+data/run-evidence/
+data/actions-runs/
 data/x_cookies_*.json
 data/wechat_session.json
 

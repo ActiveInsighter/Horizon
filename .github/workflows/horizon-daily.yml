@@ -52,12 +52,15 @@ jobs:
         run: uv sync --frozen
 
       - name: Generate daily briefings
-        run: uv run --frozen horizon --config data/config.actions.json --hours 24
+        run: uv run --frozen python scripts/run_actions.py
 
       - name: Save briefings for download
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: horizon-briefings-${{ github.run_number }}
-          path: data/summaries/*.md
-          if-no-files-found: error
+          path: |
+            data/summaries/*.md
+            data/run-evidence/*
+          if-no-files-found: warn
           retention-days: 14
