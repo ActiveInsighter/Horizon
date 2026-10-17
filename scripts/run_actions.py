@@ -64,11 +64,15 @@ async def inspect_apify(config):
     report, posts = [], {}
     since = datetime.now(timezone.utc) - timedelta(hours=24)
     async with httpx.AsyncClient(base_url='https://api.apify.com/v2', headers=headers, timeout=30) as client:
-        response = await client.get(f'/acts/{twitter.actor_id}/runs', params={'desc': 'true', 'limit': 5})
+        response = await client.get(f'/acts/{twitter.actor_id}/runs', params={
+            'desc': 'true', 'limit': 1 if twitter.batch_discussions else 5,
+        })
         response.raise_for_status()
         scraper = TwitterScraper(twitter, client)
         for run in response.json()['data']['items']:
-            record = {key: run.get(key) for key in ('id', 'status', 'startedAt', 'statusMessage')}
+            record = {key: run.get(key) for key in (
+                'id', 'status', 'startedAt', 'statusMessage', 'usageTotalUsd', 'chargedEventCounts',
+            )}
             store_id = run.get('defaultKeyValueStoreId')
             if store_id:
                 output = await client.get(f'/key-value-stores/{store_id}/records/OUTPUT')
