@@ -82,10 +82,18 @@ async def inspect_apify(config):
                 data.raise_for_status()
                 rows = data.json()
                 record['dataset_rows'] = len(rows)
+                parsed_items = []
                 for row in rows:
-                    item = scraper._parse_item(row, since)
+                    item = scraper._parse_item(row, datetime.min.replace(tzinfo=timezone.utc))
                     if item:
-                        posts[item.id] = item
+                        parsed_items.append(item)
+                        if item.published_at >= since:
+                            posts[item.id] = item
+                record['valid_rows'] = len(parsed_items)
+                record['recent_rows'] = sum(item.published_at >= since for item in parsed_items)
+                record['latest_post'] = max(
+                    (item.published_at.isoformat() for item in parsed_items), default=None
+                )
             report.append(record)
     save_json('apify-runs.json', report)
     ordered = sorted(posts.values(), key=lambda item: item.published_at, reverse=True)
