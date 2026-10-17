@@ -1,0 +1,63 @@
+name: Horizon Daily
+
+on:
+  workflow_dispatch:
+  schedule:
+    # UTC 23:17 = 北京时间次日 07:17；GitHub 定时运行可能延迟。
+    - cron: '17 23 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: horizon-daily
+  cancel-in-progress: false
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+      HORIZON_AI_MODEL: ${{ secrets.HORIZON_AI_MODEL || vars.HORIZON_AI_MODEL }}
+      HORIZON_AI_BASE_URL: ${{ secrets.HORIZON_AI_BASE_URL || vars.HORIZON_AI_BASE_URL || 'https://api.openai.com/v1' }}
+      GITHUB_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check required settings
+        run: |
+          python - <<'PY'
+          import os
+          required = ['OPENAI_API_KEY', 'APIFY_TOKEN', 'HORIZON_AI_MODEL']
+          missing = [name for name in required if not os.getenv(name, '').strip()]
+          if missing:
+              raise SystemExit('Missing repository Secrets / Variables: ' + ', '.join(missing))
+          PY
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.1'
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Generate daily briefings
+        run: uv run --frozen horizon --config data/config.actions.json --hours 24
+
+      - name: Save briefings for download
+        uses: actions/upload-artifact@v4
+        with:
+          name: horizon-briefings-${{ github.run_number }}
+          path: data/summaries/*.md
+          if-no-files-found: error
+          retention-days: 14

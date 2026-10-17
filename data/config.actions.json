@@ -1,0 +1,76 @@
+{
+  "ai": {
+    "provider": "openai",
+    "model": "${HORIZON_AI_MODEL}",
+    "base_url": "${HORIZON_AI_BASE_URL}",
+    "api_key_env": "OPENAI_API_KEY",
+    "languages": [
+      "zh",
+      "en"
+    ],
+    "temperature": 0.3,
+    "max_tokens": 4096,
+    "analysis_concurrency": 1,
+    "enrichment_concurrency": 1
+  },
+  "processing": {
+    "profiles_dir": "profiles",
+    "default_profile": "tech-news",
+    "profile_settings": {
+      "tech-news": {
+        "threshold": 7.0,
+        "topic_dedup": true
+      }
+    }
+  },
+  "sources": {
+    "hackernews": {
+      "enabled": true,
+      "fetch_top_stories": 10,
+      "min_score": 100,
+      "profile": "tech-news"
+    },
+    "rss": [
+      {
+        "name": "Simon Willison",
+        "url": "https://simonwillison.net/atom/everything/",
+        "enabled": true,
+        "category": "ai-tools",
+        "profile": "tech-news"
+      }
+    ],
+    "github": [],
+    "reddit": {
+      "enabled": false
+    },
+    "telegram": {
+      "enabled": false
+    },
+    "ossinsight": {
+      "enabled": false
+    },
+    "twitter": {
+      "enabled": true,
+      "mode": "apify",
+      "apify_token_env": "APIFY_TOKEN",
+      "actor_id": "altimis~scweet",
+      "users": [
+        "karpathy",
+        "ylecun"
+      ],
+      "keywords": [],
+      "fetch_limit": 100,
+      "fetch_reply_text": false,
+      "profile": "tech-news"
+    }
+  },
+  "collection": {
+    "time_window_hours": 24
+  },
+  "digest": {
+    "max_items": 10
+  },
+  "display": {
+    "icon_style": "emoji"
+  }
+}
