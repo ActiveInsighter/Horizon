@@ -51,7 +51,7 @@ class ActionsOrchestrator(HorizonOrchestrator):
         lines = ['# 本次抓取的 X 帖子', '', f'共 {len(posts)} 条；这是原始采集结果，尚未按 AI 分数筛选。', '']
         for item in posts:
             lines.extend([
-                f'## @{item.author or "unknown"}', '',
+                f'## {item.author or "unknown"} (@{item.metadata.get("screen_name", "unknown")})', '',
                 f'发布时间：{item.published_at.isoformat()}', '',
                 str(item.url), '', item.content or item.title, '',
             ])

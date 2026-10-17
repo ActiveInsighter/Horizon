@@ -289,12 +289,7 @@ class TwitterScraper(BaseScraper):
                 return None
 
             # Normalize tweet_id: scweet prefixes with "tweet-"
-            raw_id = item.get("id") or ""
-            numeric_id = (
-                str(raw_id).replace("tweet-", "")
-                if str(raw_id).startswith("tweet-")
-                else tweet_id
-            )
+            numeric_id = tweet_id.removeprefix("tweet-")
             conversation_id = str(
                 item.get("conversation_id")
                 or item.get("tweet", {}).get("conversation_id")
@@ -317,13 +312,13 @@ class TwitterScraper(BaseScraper):
                 return None
             text = unescape(text)
 
-            url = item.get("url")
+            url = item.get("tweet_url") or item.get("url")
             if not url:
                 permalink = item.get("permalink")
                 if permalink and screen_name != "unknown":
                     url = f"https://twitter.com/{screen_name}{permalink}"
                 else:
-                    url = f"https://twitter.com/{screen_name}/status/{tweet_id}"
+                    url = f"https://twitter.com/{screen_name}/status/{numeric_id}"
 
             title_body = text[:50].replace("\n", " ").strip()
             if len(text) > 50:
@@ -340,6 +335,7 @@ class TwitterScraper(BaseScraper):
                 profile=self.config.profile,
                 metadata={
                     "tweet_id": numeric_id,
+                    "screen_name": screen_name,
                     "conversation_id": conversation_id,
                     "favorite_count": item.get("favorite_count", 0),
                     "retweet_count": item.get("retweet_count", 0),

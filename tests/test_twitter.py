@@ -73,6 +73,24 @@ def _status_resp(status="SUCCEEDED"):
     return {"data": {"status": status}}
 
 
+def test_scweet_prefixed_id_produces_a_valid_post_link():
+    config = _make_config()
+
+    async def check():
+        async with httpx.AsyncClient() as client:
+            scraper = TwitterScraper(config, client)
+            row = _reply_row(tweet_id="2111200521201537026", handle="ylecun")
+            since = datetime.now(timezone.utc) - timedelta(days=1)
+            parsed = scraper._parse_item(row, since)
+            assert str(parsed.url) == "https://twitter.com/ylecun/status/2111200521201537026"
+            assert parsed.metadata["screen_name"] == "ylecun"
+            row["tweet_url"] = "https://x.com/ylecun/status/2111200521201537026"
+            parsed = scraper._parse_item(row, since)
+            assert str(parsed.url) == row["tweet_url"]
+
+    asyncio.run(check())
+
+
 # ---------------------------------------------------------------------------
 # Existing fetch tests
 # ---------------------------------------------------------------------------
